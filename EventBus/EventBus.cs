@@ -1,9 +1,4 @@
-﻿using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.Json;
-using EventBus.Events;
+﻿using EventBus.Events;
 using EventBus.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,9 +11,17 @@ using Polly.Retry;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using RabbitMQ.Client.Exceptions;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
 
 namespace EventBus
 {
+    /// <summary>
+    /// Represents an event bus implementation using RabbitMQ.
+    /// </summary>
     public sealed class EventBus(
         ILogger<EventBus> logger,
         IServiceProvider serviceProvider,
@@ -36,6 +39,11 @@ namespace EventBus
         private IConnection _rabbitMQConnection;
         private IModel _consumerChannel;
 
+        /// <summary>
+        /// Publishes an integration event to the event bus.
+        /// </summary>
+        /// <param name="event">The integration event to publish.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
         public Task PublishAsync(IntegrationEvent @event)
         {
             var routingKey = @event.GetType().Name;
@@ -112,6 +120,12 @@ namespace EventBus
             });
         }
 
+        /// <summary>
+        /// Sets the activity context with RabbitMQ-specific tags.
+        /// </summary>
+        /// <param name="activity">The activity to set the context for.</param>
+        /// <param name="routingKey">The RabbitMQ routing key.</param>
+        /// <param name="operation">The messaging operation (e.g., "receive", "publish").</param>
         private static void SetActivityContext(Activity activity, string routingKey, string operation)
         {
             if (activity is not null)
@@ -124,11 +138,19 @@ namespace EventBus
             }
         }
 
+        /// <summary>
+        /// Disposes the resources used by the event bus.
+        /// </summary>
         public void Dispose()
         {
             _consumerChannel?.Dispose();
         }
 
+        /// <summary>
+        /// Handles a message received from RabbitMQ.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="eventArgs">The event arguments containing the message details.</param>
         private async Task OnMessageReceived(object sender, BasicDeliverEventArgs eventArgs)
         {
             static IEnumerable<string> ExtractTraceContextFromBasicProperties(IBasicProperties props, string key)
@@ -174,7 +196,12 @@ namespace EventBus
             _consumerChannel.BasicAck(eventArgs.DeliveryTag, multiple: false);
         }
 
-        public static void SetExceptionTags(Activity activity, Exception ex)
+        /// <summary>
+        /// Sets the exception tags on the provided activity.
+        /// </summary>
+        /// <param name="activity">The activity to set the exception tags on.</param>
+        /// <param name="ex">The exception.</param>
+        private static void SetExceptionTags(Activity activity, Exception ex)
         {
             if (activity is null)
             {
@@ -187,6 +214,11 @@ namespace EventBus
             activity.SetStatus(ActivityStatusCode.Error);
         }
 
+        /// <summary>
+        /// Processes a received event.
+        /// </summary>
+        /// <param name="eventName">The name of the event.</param>
+        /// <param name="message">The message content.</param>
         private async Task ProcessEvent(string eventName, string message)
         {
             if (logger.IsEnabled(LogLevel.Trace))
@@ -226,6 +258,11 @@ namespace EventBus
             return JsonSerializer.SerializeToUtf8Bytes(@event, @event.GetType(), _subscriptionInfo.JsonSerializerOptions);
         }
 
+        /// <summary>
+        /// Starts the event bus and begins consuming messages from RabbitMQ.
+        /// </summary>
+        /// <param name="cancellationToken">A cancellation token that can be used to cancel the asynchronous operation.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
         public Task StartAsync(CancellationToken cancellationToken)
         {
             _ = Task.Factory.StartNew(() =>
@@ -293,11 +330,21 @@ namespace EventBus
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Stops the event bus and stops consuming messages from RabbitMQ.
+        /// </summary>
+        /// <param name="cancellationToken">A cancellation token that can be used to cancel the asynchronous operation.</param>
+        /// <returns>A task representing the asynchronous operation.</returns>
         public Task StopAsync(CancellationToken cancellationToken)
         {
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Creates a resilience pipeline for handling RabbitMQ exceptions and retrying the operation.
+        /// </summary>
+        /// <param name="retryCount">The number of retry attempts.</param>
+        /// <returns>The resilience pipeline.</returns>
         private static ResiliencePipeline CreateResiliencePipeline(int retryCount)
         {
             var retryOptions = new RetryStrategyOptions
