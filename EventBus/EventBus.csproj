@@ -6,7 +6,22 @@
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Version>1.1.0</Version>
+    <Authors>Usopp_God</Authors>
+    <PackageId>Usopp_God.EventBus</PackageId>
+    <Title>EventBus</Title>
+    <Copyright>MIT</Copyright>
+    <RepositoryUrl>https://github.com/VladPristavkin/EventBus</RepositoryUrl>
+    <PackageTags>EventBus</PackageTags>
+    <Description>EventBus: a powerful and flexible event bus for asynchronous messaging between application components, built on RabbitMQ.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.4" />
