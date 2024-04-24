@@ -42,7 +42,10 @@ namespace EventBus
                });
 
             // Configure EventBusOptions
-            builder.Services.Configure<EventBusOptions>(builder.Configuration.GetSection(SectionName));
+            builder.Services.Configure<EventBusOptions>(options =>
+            {
+                builder.Configuration.GetSection(SectionName).Bind(options);
+            });
 
             // Register Telemetry and EventBus implementations
             builder.Services.AddSingleton<Telemetry>();
