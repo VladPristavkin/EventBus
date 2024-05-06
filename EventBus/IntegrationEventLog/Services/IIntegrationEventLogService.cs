@@ -6,6 +6,18 @@ namespace EventBus.IntegrationEventLog.Services;
 public interface IIntegrationEventLogService
 {
     /// <summary>
+    /// Retrieves a collection of integration event log entries that are failed.
+    /// </summary>
+    /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>
+    Task<IEnumerable<IntegrationEventLogEntry>> RetrievingLogsOfFailedEventsAsync();
+
+    /// <summary>
+    /// Retrieves a collection of integration event log entries that are failed and belong to the specified transaction.
+    /// </summary>
+    /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>
+    Task<IEnumerable<IntegrationEventLogEntry>> RetrievingLogsOfFailedEventsAsync(Guid transactionId);
+
+    /// <summary>
     /// Retrieves a collection of integration event log entries that are pending to be published.
     /// </summary>
     /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>

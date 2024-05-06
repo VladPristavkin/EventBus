@@ -1,8 +1,13 @@
-﻿using EventBus.Interfaces;
+﻿using EventBus.Events;
+using EventBus.IntegrationEventLog.Services;
+using EventBus.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 
 namespace EventBus
 {
@@ -56,6 +61,73 @@ namespace EventBus
 
             // Return EventBusBuilder for further configuration
             return new EventBusBuilder(builder.Services);
+        }
+
+        /// <summary>
+        /// Configures the JSON serialization options for the EventBus.
+        /// </summary>
+        /// <param name="eventBusBuilder">The EventBus builder.</param>
+        /// <param name="configure">The action to configure the JSON serialization options.</param>
+        /// <returns>The EventBus builder.</returns>
+        public static IEventBusBuilder ConfigureJsonOptions(this IEventBusBuilder eventBusBuilder, Action<JsonSerializerOptions> configure)
+        {
+            eventBusBuilder.Services.Configure<EventBusSubscriptionInfo>(o =>
+            {
+                configure(o.JsonSerializerOptions);
+            });
+
+            return eventBusBuilder;
+        }
+
+        /// <summary>
+        /// Adds a subscription for an integration event.
+        /// </summary>
+        /// <typeparam name="T">The type of the integration event.</typeparam>
+        /// <typeparam name="TH">The type of the integration event handler.</typeparam>
+        /// <param name="eventBusBuilder">The EventBus builder.</param>
+        /// <returns>The EventBus builder.</returns>
+        public static IEventBusBuilder AddSubscription<T, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TH>(this IEventBusBuilder eventBusBuilder)
+            where T : IntegrationEvent
+            where TH : class, IIntegrationEventHandler<T>
+        {
+            eventBusBuilder.Services.AddKeyedTransient<IIntegrationEventHandler, TH>(typeof(T));
+
+            eventBusBuilder.Services.Configure<EventBusSubscriptionInfo>(o =>
+            {
+                o.EventTypes[typeof(T).Name] = typeof(T);
+            });
+
+            return eventBusBuilder;
+        }
+
+        /// <summary>
+        /// Extends IServiceCollection to add registration for an integration event log service.
+        /// </summary>
+        /// <param name="services">The collection of services to add the integration event log service to.</param>
+        /// <param name="scoped">If true, the integration event log service is registered with scoped lifetime.</param>
+        /// <param name="transient">If true, the integration event log service is registered with transient lifetime.</param>
+        /// <param name="singleton">If true, the integration event log service is registered with singleton lifetime.</param>
+        /// <returns>The modified IServiceCollection after adding the integration event log service registration.</returns>
+        /// <exception cref="ArgumentNullException">Thrown when the services parameter is null.</exception>
+        public static IServiceCollection AddIntegrationEventLogService<T>(
+            this IServiceCollection services,
+            bool scoped = false,
+            bool transient = false,
+            bool singleton = true)
+            where T : class, IIntegrationEventLogService
+        {
+            ArgumentNullException.ThrowIfNull(services);
+
+            if (singleton && !scoped && !transient)
+                return services.AddSingleton<IIntegrationEventLogService, T>();
+
+            if (scoped && !singleton && !transient)
+                return services.AddScoped<IIntegrationEventLogService, T>();
+
+            if (transient && !singleton && !scoped)
+                return services.AddTransient<IIntegrationEventLogService, T>();
+
+            else return services.AddSingleton<IIntegrationEventLogService, T>();
         }
 
         private class EventBusBuilder(IServiceCollection services) : IEventBusBuilder

@@ -5,14 +5,13 @@ using System.Reflection;
 
 namespace EventBus.IntegrationEventLog.Services;
 
-public class IntegrationEventLogService<TContext> : IIntegrationEventLogService, IDisposable
-    where TContext : DbContext
+public class EFIntegrationEventLogService : IIntegrationEventLogService, IDisposable
 {
     private volatile bool _disposedValue;
-    private readonly TContext _context;
+    private readonly DbContext _context;
     private readonly Type[] _eventTypes;
 
-    public IntegrationEventLogService(TContext context)
+    public EFIntegrationEventLogService(DbContext context)
     {
         _context = context;
         _eventTypes = Assembly.Load(Assembly.GetEntryAssembly().FullName)
@@ -138,5 +137,43 @@ public class IntegrationEventLogService<TContext> : IIntegrationEventLogService,
     {
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Retrieves a collection of integration event log entries that are failed.
+    /// </summary>
+    /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>
+    public async Task<IEnumerable<IntegrationEventLogEntry>> RetrievingLogsOfFailedEventsAsync()
+    {
+        var result = await _context.Set<IntegrationEventLogEntry>()
+            .Where(e => e.State == EventStateEnum.PublishedFailed)
+            .ToListAsync();
+
+        if (result.Count != 0)
+        {
+            return result.OrderBy(o => o.CreationTime)
+                .Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName)));
+        }
+
+        return [];
+    }
+
+    /// <summary>
+    /// Retrieves a collection of integration event log entries that are failed and belong to the specified transaction.
+    /// </summary>
+    /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>
+    public async Task<IEnumerable<IntegrationEventLogEntry>> RetrievingLogsOfFailedEventsAsync(Guid transactionId)
+    {
+        var result = await _context.Set<IntegrationEventLogEntry>()
+          .Where(e => e.TransactionId == transactionId && e.State == EventStateEnum.PublishedFailed)
+          .ToListAsync();
+
+        if (result.Count != 0)
+        {
+            return result.OrderBy(o => o.CreationTime)
+                .Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName)));
+        }
+
+        return [];
     }
 }
