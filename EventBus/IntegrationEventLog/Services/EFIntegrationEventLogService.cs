@@ -1,5 +1,6 @@
 ﻿using EventBus.Events;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Reflection;
 
@@ -11,13 +12,23 @@ public class EFIntegrationEventLogService : IIntegrationEventLogService, IDispos
     private readonly DbContext _context;
     private readonly Type[] _eventTypes;
 
-    public EFIntegrationEventLogService(DbContext context)
+    public EFIntegrationEventLogService(DbContext context, Type assemblyReference = default)
     {
         _context = context;
-        _eventTypes = Assembly.Load(Assembly.GetEntryAssembly().FullName)
+        if (assemblyReference != default)
+        {
+            _eventTypes = Assembly.Load(Assembly.GetAssembly(assemblyReference).FullName)
             .GetTypes()
             .Where(t => t.Name.EndsWith(nameof(IntegrationEvent)))
             .ToArray();
+        }
+        else
+        {
+            _eventTypes = Assembly.Load(Assembly.GetEntryAssembly().FullName)
+           .GetTypes()
+           .Where(t => t.Name.EndsWith(nameof(IntegrationEvent)))
+           .ToArray();
+        }
     }
 
     /// <summary>
