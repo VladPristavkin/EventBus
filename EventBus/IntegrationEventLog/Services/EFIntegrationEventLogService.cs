@@ -1,6 +1,5 @@
 ﻿using EventBus.Events;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Reflection;
 

@@ -1,6 +1,7 @@
 ﻿using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Data;
 using System.Data.Common;
 
 namespace EventBus.IntegrationEventLog
@@ -25,21 +26,38 @@ namespace EventBus.IntegrationEventLog
         {
             ArgumentNullException.ThrowIfNull(connection);
 
+            const string createTableQuery = @"
+            CREATE TABLE IF NOT EXISTS IntegrationEventLog (
+                EventId VARCHAR(36) PRIMARY KEY,
+                EventTypeName VARCHAR(255) NOT NULL,
+                State INT NOT NULL,
+                TimesSent INT NOT NULL,
+                CreationTime TIMESTAMP NOT NULL,
+                Content TEXT NOT NULL,
+                TransactionId VARCHAR(36) NOT NULL
+            )";
+
             try
             {
-                connection.Execute(@"CREATE TABLE IF NOT EXISTS IntegrationEventLog (
-                                    EventId VARCHAR(36) PRIMARY KEY,
-                                    EventTypeName VARCHAR(255) NOT NULL,
-                                    State INT NOT NULL,
-                                    TimesSent INT NOT NULL,
-                                    CreationTime TIMESTAMP NOT NULL,
-                                    Content VARCHAR(MAX) NOT NULL,
-                                    TransactionId VARCHAR(36) NOT NULL
-                                    )");
+                if (connection.State != ConnectionState.Open)
+                {
+                    connection.Open();
+                }
+
+                connection.Execute(createTableQuery);
+                logger.LogInformation("IntegrationEventLog table created successfully.");
             }
             catch (DbException ex)
             {
-                logger.LogError($"An error occurred while creating IntegrationEventLog table: {ex.Message}");
+                logger.LogError(ex, "An error occurred while creating IntegrationEventLog table.");
+                throw;
+            }
+            finally
+            {
+                if (connection.State == ConnectionState.Open)
+                {
+                    connection.Close();
+                }
             }
         }
     }

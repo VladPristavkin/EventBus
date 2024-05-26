@@ -8,19 +8,34 @@ using System.Reflection;
 namespace EventBus.IntegrationEventLog.Services
 {
     public class DapperIntegrationEventLogService :
-        IIntegrationEventLogService, IDisposable
+        IIntegrationEventLogService
     {
         private volatile bool _disposedValue;
-        private readonly DbConnection _dbConnection;
+        private readonly string _dbConnectionString;
+        private readonly string _providerName;
         private readonly Type[] _eventTypes;
 
-        public DapperIntegrationEventLogService(DbConnection dbConnection)
+        public DapperIntegrationEventLogService(string dbConnectionString,
+            string providerName,
+            Type? assemblyReference = null)
         {
-            _dbConnection = dbConnection;
-            _eventTypes = Assembly.Load(Assembly.GetEntryAssembly().FullName)
-                .GetTypes()
-                .Where(t => t.Name.EndsWith(nameof(IntegrationEvent)))
-                .ToArray();
+            _dbConnectionString = dbConnectionString ?? throw new ArgumentNullException(nameof(dbConnectionString));
+            _providerName = providerName ?? throw new ArgumentNullException(providerName);
+
+            if (assemblyReference != null)
+            {
+                _eventTypes = Assembly.Load(Assembly.GetAssembly(assemblyReference).FullName)
+                    .GetTypes()
+                    .Where(t => t.Name.EndsWith(nameof(IntegrationEvent)))
+                    .ToArray();
+            }
+            else
+            {
+                _eventTypes = Assembly.Load(Assembly.GetEntryAssembly().FullName)
+                  .GetTypes()
+                  .Where(t => t.Name.EndsWith(nameof(IntegrationEvent)))
+                  .ToArray();
+            }
         }
 
         /// <summary>
@@ -29,7 +44,7 @@ namespace EventBus.IntegrationEventLog.Services
         /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>
         public async Task<IEnumerable<IntegrationEventLogEntry>> RetrievingLogsOfFailedEventsAsync()
         {
-            var sql = @"SELECT 
+            const string sql = @"SELECT 
                         EventId, 
                         EventTypeName,
                         State,
@@ -41,17 +56,17 @@ namespace EventBus.IntegrationEventLog.Services
                     WHERE State = @FailedState
                     ORDER BY CreationTime";
 
-            var result = await _dbConnection.QueryAsync<IntegrationEventLogEntry>(sql, new
+            using (var connection = EnsureCreateAndOpenConnection())
             {
-                FailedState = (int)EventStateEnum.PublishedFailed
-            });
+                var result = await connection.QueryAsync<IntegrationEventLogEntry>(sql, new
+                {
+                    FailedState = (int)EventStateEnum.PublishedFailed
+                });
 
-            if (result.Any())
-            {
-                return result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName)));
+                return result.Any() ?
+                    result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
+                    Enumerable.Empty<IntegrationEventLogEntry>();
             }
-
-            return Enumerable.Empty<IntegrationEventLogEntry>();
         }
 
         /// <summary>
@@ -60,7 +75,7 @@ namespace EventBus.IntegrationEventLog.Services
         /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>
         public async Task<IEnumerable<IntegrationEventLogEntry>> RetrievingLogsOfFailedEventsAsync(Guid transactionId)
         {
-            var sql = @"SELECT 
+            const string sql = @"SELECT 
                         EventId,
                         EventTypeName,
                         State,
@@ -72,18 +87,18 @@ namespace EventBus.IntegrationEventLog.Services
                     WHERE TransactionId = @TransactionId AND State = @FailedState
                     ORDER BY CreationTime";
 
-            var result = await _dbConnection.QueryAsync<IntegrationEventLogEntry>(sql, new
+            using (var connection = EnsureCreateAndOpenConnection())
             {
-                TransactionId = transactionId,
-                FailedState = (int)EventStateEnum.PublishedFailed
-            });
+                var result = await connection.QueryAsync<IntegrationEventLogEntry>(sql, new
+                {
+                    TransactionId = transactionId,
+                    FailedState = (int)EventStateEnum.PublishedFailed
+                });
 
-            if (result.Any())
-            {
-                return result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName)));
+                return result.Any() ?
+                    result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
+                    Enumerable.Empty<IntegrationEventLogEntry>();
             }
-
-            return Enumerable.Empty<IntegrationEventLogEntry>();
         }
 
         /// <summary>
@@ -92,7 +107,7 @@ namespace EventBus.IntegrationEventLog.Services
         /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>
         public async Task<IEnumerable<IntegrationEventLogEntry>> RetrieveEventLogsPendingToPublishAsync()
         {
-            var sql = @"SELECT 
+            const string sql = @"SELECT 
                             EventId, 
                             EventTypeName, 
                             State, 
@@ -104,15 +119,17 @@ namespace EventBus.IntegrationEventLog.Services
                         WHERE State = @State
                         ORDER BY CreationTime";
 
-            var result = await _dbConnection.QueryAsync<IntegrationEventLogEntry>(sql,
-                new { State = (int)EventStateEnum.NotPublished });
-
-            if (result.Any())
+            using (var connection = EnsureCreateAndOpenConnection())
             {
-                return result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName)));
-            }
+                var result = await connection.QueryAsync<IntegrationEventLogEntry>(sql, new
+                {
+                    State = (int)EventStateEnum.NotPublished
+                });
 
-            return Enumerable.Empty<IntegrationEventLogEntry>();
+                return result.Any() ?
+                        result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
+                        Enumerable.Empty<IntegrationEventLogEntry>();
+            }
         }
 
         /// <summary>
@@ -121,7 +138,7 @@ namespace EventBus.IntegrationEventLog.Services
         /// <returns>An enumerable collection of <see cref="IntegrationEventLogEntry"/> objects.</returns>
         public async Task<IEnumerable<IntegrationEventLogEntry>> RetrieveEventLogsPendingToPublishAsync(Guid transactionId)
         {
-            var sql = @"SELECT 
+            const string sql = @"SELECT 
                         EventId, 
                         EventTypeName, 
                         State, 
@@ -133,19 +150,18 @@ namespace EventBus.IntegrationEventLog.Services
                     WHERE TransactionId = @TransactionId AND State = @State
                     ORDER BY CreationTime";
 
-            var result = await _dbConnection.QueryAsync<IntegrationEventLogEntry>(sql,
-                new
+            using (var connection = EnsureCreateAndOpenConnection())
+            {
+                var result = await connection.QueryAsync<IntegrationEventLogEntry>(sql, new
                 {
                     TransactionId = transactionId,
                     State = (int)EventStateEnum.NotPublished
                 });
 
-            if (result.Any())
-            {
-                return result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName)));
+                return result.Any() ?
+                    result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
+                    Enumerable.Empty<IntegrationEventLogEntry>();
             }
-
-            return Enumerable.Empty<IntegrationEventLogEntry>();
         }
 
         /// <summary>
@@ -155,22 +171,25 @@ namespace EventBus.IntegrationEventLog.Services
         {
             var eventLogEntry = new IntegrationEventLogEntry(@event);
 
-            var sql = @"
+            const string sql = @"
         INSERT INTO IntegrationEventLog 
             (EventId, EventTypeName, State, TimesSent, CreationTime, Content, TransactionId)
         VALUES 
             (@EventId, @EventTypeName, @State, @TimesSent, @CreationTime, @Content, @TransactionId)";
 
-            await _dbConnection.ExecuteAsync(sql, new
+            using (var connection = EnsureCreateAndOpenConnection())
             {
-                eventLogEntry.EventId,
-                eventLogEntry.EventTypeName,
-                State = (int)eventLogEntry.State,
-                eventLogEntry.TimesSent,
-                eventLogEntry.CreationTime,
-                eventLogEntry.Content,
-                eventLogEntry.TransactionId
-            });
+                await connection.ExecuteAsync(sql, new
+                {
+                    eventLogEntry.EventId,
+                    eventLogEntry.EventTypeName,
+                    State = (int)eventLogEntry.State,
+                    eventLogEntry.TimesSent,
+                    eventLogEntry.CreationTime,
+                    eventLogEntry.Content,
+                    eventLogEntry.TransactionId
+                });
+            }
         }
 
         /// <summary>
@@ -182,22 +201,25 @@ namespace EventBus.IntegrationEventLog.Services
 
             var eventLogEntry = new IntegrationEventLogEntry(@event, transaction.TransactionId);
 
-            var sql = @"
+            const string sql = @"
         INSERT INTO IntegrationEventLog 
             (EventId, EventTypeName, State, TimesSent, CreationTime, Content, TransactionId)
         VALUES 
             (@EventId, @EventTypeName, @State, @TimesSent, @CreationTime, @Content, @TransactionId)";
 
-            await _dbConnection.ExecuteAsync(sql, new
+            using (var connection = EnsureCreateAndOpenConnection())
             {
-                eventLogEntry.EventId,
-                eventLogEntry.EventTypeName,
-                State = (int)eventLogEntry.State,
-                eventLogEntry.TimesSent,
-                eventLogEntry.CreationTime,
-                eventLogEntry.Content,
-                eventLogEntry.TransactionId
-            }, (System.Data.IDbTransaction?)transaction);
+                await connection.ExecuteAsync(sql, new
+                {
+                    eventLogEntry.EventId,
+                    eventLogEntry.EventTypeName,
+                    State = (int)eventLogEntry.State,
+                    eventLogEntry.TimesSent,
+                    eventLogEntry.CreationTime,
+                    eventLogEntry.Content,
+                    eventLogEntry.TransactionId
+                }, transaction.GetDbTransaction());
+            }
         }
 
         /// <summary>
@@ -226,38 +248,34 @@ namespace EventBus.IntegrationEventLog.Services
 
         private async Task UpdateEventStatus(Guid eventId, EventStateEnum status)
         {
-            var sql = @"
+            const string sql = @"
         UPDATE IntegrationEventLog
         SET 
             State = @Status,
             TimesSent = CASE WHEN @Status = @InProgressState THEN TimesSent + 1 ELSE TimesSent END
         WHERE EventId = @EventId";
 
-            await _dbConnection.ExecuteAsync(sql, new
+            using (var connection = EnsureCreateAndOpenConnection())
             {
-                EventId = eventId,
-                Status = (int)status,
-                InProgressState = (int)EventStateEnum.InProgress
-            });
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!_disposedValue)
-            {
-                if (disposing)
+                await connection.ExecuteAsync(sql, new
                 {
-                    _dbConnection.Dispose();
-                }
-
-                _disposedValue = true;
+                    EventId = eventId,
+                    Status = (int)status,
+                    InProgressState = (int)EventStateEnum.InProgress
+                });
             }
         }
 
-        public void Dispose()
+        private DbConnection EnsureCreateAndOpenConnection()
         {
-            Dispose(disposing: true);
-            GC.SuppressFinalize(this);
+            if (_dbConnectionString == null)
+            {
+                throw new InvalidOperationException("Database connection is not initialized.");
+            }
+
+            var connection = DbConnectionFactory.CreateConnection(_dbConnectionString, _providerName);
+            connection.Open();
+            return connection;
         }
     }
 }
