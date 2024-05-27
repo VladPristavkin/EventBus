@@ -298,7 +298,7 @@ namespace EventBus.IntegrationEventLog.Services
             {
                 await connection.ExecuteAsync(sql, new
                 {
-                    EventId = eventId,
+                    EventId = eventId.ToString(),
                     Status = (int)status,
                     InProgressState = (int)EventStateEnum.InProgress
                 });
