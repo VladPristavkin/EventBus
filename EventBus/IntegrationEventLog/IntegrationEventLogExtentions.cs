@@ -45,11 +45,11 @@ namespace EventBus.IntegrationEventLog
                 }
 
                 connection.Execute(createTableQuery);
-                logger.LogInformation("IntegrationEventLog table created successfully.");
+               
             }
             catch (DbException ex)
             {
-                logger.LogError(ex, "An error occurred while creating IntegrationEventLog table.");
+               
                 throw;
             }
             finally

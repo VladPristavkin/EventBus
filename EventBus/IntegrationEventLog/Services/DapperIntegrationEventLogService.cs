@@ -2,8 +2,11 @@
 using EventBus.Events;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 using System.Data.Common;
 using System.Reflection;
+using System.Text.Json;
 
 namespace EventBus.IntegrationEventLog.Services
 {
@@ -58,13 +61,22 @@ namespace EventBus.IntegrationEventLog.Services
 
             using (var connection = EnsureCreateAndOpenConnection())
             {
-                var result = await connection.QueryAsync<IntegrationEventLogEntry>(sql, new
+                var result = await connection.QueryAsync<IntegrationEventLogEntryEntity>(sql, new
                 {
                     FailedState = (int)EventStateEnum.PublishedFailed
                 });
 
-                return result.Any() ?
-                    result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
+                var logEntries = result.Select(row => new IntegrationEventLogEntry
+                (Guid.Parse(row.EventId), row.EventTypeName,
+                (EventStateEnum)row.State,
+                row.TimesSent,
+                row.CreationTime,
+                row.Content,
+                Guid.Parse(row.TransactionId)
+                )).ToList();
+
+                return logEntries.Any() ?
+                    logEntries.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
                     Enumerable.Empty<IntegrationEventLogEntry>();
             }
         }
@@ -89,14 +101,23 @@ namespace EventBus.IntegrationEventLog.Services
 
             using (var connection = EnsureCreateAndOpenConnection())
             {
-                var result = await connection.QueryAsync<IntegrationEventLogEntry>(sql, new
+                var result = await connection.QueryAsync<IntegrationEventLogEntryEntity>(sql, new
                 {
-                    TransactionId = transactionId,
+                    TransactionId = transactionId.ToString(),
                     FailedState = (int)EventStateEnum.PublishedFailed
                 });
 
-                return result.Any() ?
-                    result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
+                var logEntries = result.Select(row => new IntegrationEventLogEntry
+               (Guid.Parse(row.EventId), row.EventTypeName,
+               (EventStateEnum)row.State,
+               row.TimesSent,
+               row.CreationTime,
+               row.Content,
+               Guid.Parse(row.TransactionId)
+               )).ToList();
+
+                return logEntries.Any() ?
+                    logEntries.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
                     Enumerable.Empty<IntegrationEventLogEntry>();
             }
         }
@@ -121,14 +142,23 @@ namespace EventBus.IntegrationEventLog.Services
 
             using (var connection = EnsureCreateAndOpenConnection())
             {
-                var result = await connection.QueryAsync<IntegrationEventLogEntry>(sql, new
+                var result = await connection.QueryAsync<IntegrationEventLogEntryEntity>(sql, new
                 {
                     State = (int)EventStateEnum.NotPublished
                 });
 
-                return result.Any() ?
-                        result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
-                        Enumerable.Empty<IntegrationEventLogEntry>();
+                var logEntries = result.Select(row => new IntegrationEventLogEntry
+               (Guid.Parse(row.EventId), row.EventTypeName,
+               (EventStateEnum)row.State,
+               row.TimesSent,
+               row.CreationTime,
+               row.Content,
+               Guid.Parse(row.TransactionId)
+               )).ToList();
+
+                return logEntries.Any() ?
+                    logEntries.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
+                    Enumerable.Empty<IntegrationEventLogEntry>();
             }
         }
 
@@ -152,14 +182,23 @@ namespace EventBus.IntegrationEventLog.Services
 
             using (var connection = EnsureCreateAndOpenConnection())
             {
-                var result = await connection.QueryAsync<IntegrationEventLogEntry>(sql, new
+                var result = await connection.QueryAsync<IntegrationEventLogEntryEntity>(sql, new
                 {
                     TransactionId = transactionId,
                     State = (int)EventStateEnum.NotPublished
                 });
 
-                return result.Any() ?
-                    result.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
+                var logEntries = result.Select(row => new IntegrationEventLogEntry
+               (Guid.Parse(row.EventId), row.EventTypeName,
+               (EventStateEnum)row.State,
+               row.TimesSent,
+               row.CreationTime,
+               row.Content,
+               Guid.Parse(row.TransactionId)
+               )).ToList();
+
+                return logEntries.Any() ?
+                    logEntries.Select(e => e.DeserializeJsonContent(_eventTypes.FirstOrDefault(t => t.Name == e.EventTypeShortName))) :
                     Enumerable.Empty<IntegrationEventLogEntry>();
             }
         }
@@ -276,6 +315,26 @@ namespace EventBus.IntegrationEventLog.Services
             var connection = DbConnectionFactory.CreateConnection(_dbConnectionString, _providerName);
             connection.Open();
             return connection;
+        }
+
+        private sealed class IntegrationEventLogEntryEntity()
+        {
+            public string EventId { get; private set; }
+
+            [Required]
+            public string EventTypeName { get; private set; }
+
+            public EventStateEnum State { get; set; }
+
+            public int TimesSent { get; set; }
+
+            public DateTime CreationTime { get; private set; }
+
+            [Required]
+            public string Content { get; private set; }
+
+            public string TransactionId { get; private set; }
+
         }
     }
 }

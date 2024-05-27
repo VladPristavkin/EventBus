@@ -25,6 +25,23 @@ public class IntegrationEventLogEntry
         TransactionId = transactionId;
     }
 
+    internal IntegrationEventLogEntry(Guid eventId, 
+        string eventTypeName, 
+        EventStateEnum state, 
+        int timesSent, 
+        DateTime creationTime, 
+        string content, 
+        Guid transactionId)
+    {
+        EventId = eventId;
+        EventTypeName = eventTypeName;
+        State = state;
+        TimesSent = timesSent;
+        CreationTime = creationTime;
+        Content = content;
+        TransactionId = transactionId;
+    }
+
     /// <summary>
     /// The unique identifier of the event.
     /// </summary>
